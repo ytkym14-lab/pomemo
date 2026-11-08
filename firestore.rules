@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 共有コードのハッシュ値をlistIdとして使う。listIdを知っている端末だけが読み書きできる。
+    // 「lists」自体の一覧取得は許可しない（他人のlistIdを列挙できない）。
+    match /lists/{listId}/stores/{id} {
+      allow read, write: if true;
+    }
+    match /lists/{listId}/categories/{id} {
+      allow read, write: if true;
+    }
+    match /lists/{listId}/items/{id} {
+      allow read, write: if true;
+    }
+  }
+}

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2e9e5b">
+<meta name="color-scheme" content="light dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ぽちメモ">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="style.css">
+<title>ぽちメモ</title>
+</head>
+<body>
+<main id="setup" hidden>
+  <h1>ぽちメモ</h1>
+  <p class="lead">夫婦で共有する買い物メモです。</p>
+  <label>共有コード（8文字以上・好きな文字列）
+    <input id="setup-code" type="text" autocomplete="off" autocapitalize="off" spellcheck="false">
+  </label>
+  <p class="hint">1人目が決めて入力し、2人目は同じ文字列を入力します。他の人に知られないようにしてください。</p>
+  <label>自分の表示（イニシャルか絵文字 1〜2文字）
+    <input id="setup-who" type="text" maxlength="4" autocomplete="off">
+  </label>
+  <p id="setup-error" class="error" role="alert"></p>
+  <button id="setup-go" class="primary big">はじめる</button>
+</main>
+
+<main id="config-missing" hidden>
+  <h1>Firebaseの設定が必要です</h1>
+  <p class="lead">firebase-config.js に Firebase の設定値を貼り付けてください。手順は README.md にあります。</p>
+</main>
+
+<div id="app" hidden>
+  <header>
+    <h1>ぽちメモ</h1>
+    <span id="offline" class="offline" hidden>オフライン</span>
+    <span class="spacer"></span>
+    <button id="btn-edit" class="chip">編集</button>
+    <button id="btn-settings" class="icon" aria-label="設定">⚙</button>
+  </header>
+  <nav id="tabs"></nav>
+  <section id="store-tools" hidden></section>
+  <section id="content"></section>
+  <footer id="bar">
+    <button id="btn-temp" class="secondary">＋ 臨時アイテム</button>
+    <button id="btn-complete" class="primary">買い物完了</button>
+  </footer>
+</div>
+
+<div id="toast" role="status"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
