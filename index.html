@@ -47,8 +47,14 @@
   <section id="store-tools" hidden></section>
   <section id="content"></section>
   <footer id="bar">
-    <button id="btn-temp" class="secondary">＋ 臨時アイテム</button>
-    <button id="btn-complete" class="primary">買い物完了</button>
+    <div id="bar-store">
+      <button id="btn-temp" class="secondary">＋ 臨時アイテム</button>
+      <button id="btn-complete" class="primary">買い物完了</button>
+    </div>
+    <form id="bar-free" hidden>
+      <input id="free-input" type="text" placeholder="追加するものを入力" autocomplete="off" enterkeyhint="done">
+      <button type="submit" class="primary">追加</button>
+    </form>
   </footer>
 </div>
 

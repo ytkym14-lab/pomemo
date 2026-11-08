@@ -1,10 +1,10 @@
 // アプリ本体をキャッシュして、起動を速くし、圏外でも開けるようにする。
-const CACHE = "pomemo-v1";
+const CACHE = "pomemo-v2";
 const SHELL = ["./", "./index.html", "./style.css", "./app.js", "./firebase-config.js", "./manifest.webmanifest",
   "./icons/icon.svg", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: "reload" })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (e) => {

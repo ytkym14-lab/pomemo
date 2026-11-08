@@ -11,8 +11,9 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 const strlen = (s) => Array.from(s).length;
 
-const state = { stores: [], cats: [], items: [] };
-const ui = { storeId: localStorage.getItem(LS_STORE) || null, edit: false };
+const state = { stores: [], cats: [], items: [], free: [] };
+const FREE = "__free__"; // 一番右の「フリー」タブのID
+const ui = { storeId: localStorage.getItem(LS_STORE) || null, edit: false, scrollTab: true };
 let db = null, listId = null, who = "";
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
@@ -37,7 +38,7 @@ async function boot() {
     state[key] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     render();
   }, (err) => toast("同期エラー: " + err.code));
-  sub("stores", "stores"); sub("categories", "cats"); sub("items", "items");
+  sub("stores", "stores"); sub("categories", "cats"); sub("items", "items"); sub("free", "free");
   updateOnline();
   render();
 }
@@ -117,13 +118,38 @@ function patch(name, id, data) { updateDoc(ref(name, id), data).catch((e) => toa
 function commit(batch) { batch.commit().catch((e) => toast("保存エラー: " + e.code)); }
 
 function toggleItem(item) {
-  if (item.need) patch("items", item.id, { need: false, qty: 0 });
-  else patch("items", item.id, { need: true, qty: 1, by: who });
+  if (item.need) patch("items", item.id, { need: false, memo: "" });
+  else patch("items", item.id, { need: true, by: who });
 }
-function changeQty(item, delta) {
-  const q = (item.qty || 1) + delta;
-  if (q <= 0) patch("items", item.id, { need: false, qty: 0 });
-  else patch("items", item.id, { qty: q });
+function editMemo(item) {
+  modal({
+    title: item.name,
+    body: `<label>メモ（自由記述）<input name="memo" value="${esc(item.memo || "")}" placeholder="例: 2本、赤いほう"></label>`,
+    buttons: [
+      { label: "キャンセル" },
+      { label: "保存", cls: "primary", onClick: (v) => { patch("items", item.id, { memo: v.memo.trim() }); } }
+    ]
+  });
+}
+
+// ---------- フリーリスト ----------
+function addFree(text) {
+  const t = text.trim();
+  if (!t) return;
+  save("free", uid(), { text: t, done: false, createdAt: Date.now(), doneAt: null });
+}
+function toggleFree(f) {
+  if (f.done) patch("free", f.id, { done: false, doneAt: null });
+  else patch("free", f.id, { done: true, doneAt: Date.now() });
+}
+function clearDoneFree() {
+  const done = state.free.filter((x) => x.done);
+  if (!done.length) { toast("チェック済みの項目はありません"); return; }
+  confirmDialog("チェック済みを削除", `チェック済みの ${done.length} 件を削除します。`, "削除する", () => {
+    const b = writeBatch(db);
+    done.forEach((x) => b.delete(ref("free", x.id)));
+    commit(b);
+  });
 }
 
 function swapOrder(name, list, id, dir) {
@@ -150,7 +176,7 @@ function completeStore(store) {
     "完了にする",
     () => {
       const b = writeBatch(db);
-      needs.forEach((i) => b.update(ref("items", i.id), { need: false, qty: 0 }));
+      needs.forEach((i) => b.update(ref("items", i.id), { need: false, memo: "" }));
       temps.forEach((i) => b.delete(ref("items", i.id)));
       commit(b);
       toast("買い物完了しました");
@@ -160,6 +186,7 @@ function completeStore(store) {
 // ---------- 画面 ----------
 function currentStore() {
   const stores = state.stores.slice().sort(byOrder);
+  if (ui.storeId === FREE) return null;
   let s = stores.find((x) => x.id === ui.storeId);
   if (!s) s = stores[0] || null;
   ui.storeId = s ? s.id : null;
@@ -170,7 +197,10 @@ function render() {
   if (!db) return;
   const stores = state.stores.slice().sort(byOrder);
   const store = currentStore();
-  if (store) localStorage.setItem(LS_STORE, store.id);
+  const free = ui.storeId === FREE;
+  if (store || free) localStorage.setItem(LS_STORE, free ? FREE : store.id);
+  $("#bar-store").hidden = free;
+  $("#bar-free").hidden = !free;
 
   $("#btn-edit").classList.toggle("on", ui.edit);
   $("#btn-edit").textContent = ui.edit ? "編集中（完了）" : "編集";
@@ -182,7 +212,13 @@ function render() {
   state.items.forEach((i) => { if (i.need) counts[i.storeId] = (counts[i.storeId] || 0) + 1; });
   $("#tabs").innerHTML = stores.map((s) =>
     `<button class="tab ${store && s.id === store.id ? "active" : ""}" data-action="tab" data-id="${s.id}">${esc(s.name)}<span class="badge">${counts[s.id] || 0}</span></button>`
-  ).join("") + (ui.edit ? `<button class="tab add" data-action="add-store">＋ お店</button>` : "");
+  ).join("") + (ui.edit ? `<button class="tab add" data-action="add-store">＋ お店</button>` : "") +
+    `<button class="tab ${free ? "active" : ""}" data-action="tab" data-id="${FREE}">フリー<span class="badge">${state.free.filter((x) => !x.done).length}</span></button>`;
+  if (ui.scrollTab) {
+    ui.scrollTab = false;
+    const act = $("#tabs .active");
+    if (act) act.scrollIntoView({ inline: "center", block: "nearest" });
+  }
 
   // 店の編集ツール
   const tools = $("#store-tools");
@@ -193,6 +229,7 @@ function render() {
 
   // 本体
   const c = $("#content");
+  if (free) { renderFree(c); return; }
   if (!store) {
     c.innerHTML = `<div class="empty">お店がまだありません。<br>右上の「編集」→「＋ お店」から、<br>よく行くお店を追加してください。</div>`;
     return;
@@ -220,8 +257,22 @@ function tileHtml(i) {
   const need = !!i.need;
   return `<div class="tile ${need ? "need" : ""}" role="button" tabindex="0" data-action="tile" data-id="${i.id}">` +
     `<span class="name">${esc(i.name)}</span>` +
-    (need ? `<div class="row"><span class="qty"><button data-action="dec" data-id="${i.id}" aria-label="減らす">−</button><span>${i.qty || 1}</span><button data-action="inc" data-id="${i.id}" aria-label="増やす">＋</button></span><span class="by">${esc(i.by || "")}</span></div>` : "") +
+    (need ? `<div class="row"><span class="memo ${i.memo ? "" : "empty"}" data-action="memo" data-id="${i.id}">${i.memo ? esc(i.memo) : "メモ"}</span><span class="by">${esc(i.by || "")}</span></div>` : "") +
     `</div>`;
+}
+
+function renderFree(c) {
+  const open = state.free.filter((x) => !x.done).sort(byCreated);
+  const done = state.free.filter((x) => x.done).sort((a, b) => (b.doneAt ?? 0) - (a.doneAt ?? 0));
+  const row = (x) => `<li class="free-row ${x.done ? "done" : ""}" role="button" tabindex="0" data-action="free-toggle" data-id="${x.id}"><span class="box">${x.done ? "☑" : "☐"}</span><span class="text">${esc(x.text)}</span></li>`;
+  let html = "";
+  if (!open.length && !done.length) html += `<div class="empty">フリーリストは空です。<br>下の入力欄から、自由に書き足せます。</div>`;
+  if (open.length) html += `<ul class="free">${open.map(row).join("")}</ul>`;
+  if (done.length) {
+    html += `<div class="cat-head"><span class="name">チェック済み</span><button class="danger" data-action="free-clear">チェック済みを削除</button></div>` +
+      `<ul class="free">${done.map(row).join("")}</ul>`;
+  }
+  c.innerHTML = html;
 }
 
 // ---------- ダイアログ（追加・編集） ----------
@@ -292,7 +343,7 @@ function addItem(cat) {
     { label: "キャンセル" },
     { label: "追加", cls: "primary", onClick: (v) => {
       if (!v.name.trim()) return false;
-      save("items", uid(), { name: v.name.trim(), storeId: cat.storeId, categoryId: cat.id, need: false, qty: 0, by: "", temp: false, createdAt: Date.now() });
+      save("items", uid(), { name: v.name.trim(), storeId: cat.storeId, categoryId: cat.id, need: false, memo: "", by: "", temp: false, createdAt: Date.now() });
     } }
   ] });
 }
@@ -334,13 +385,12 @@ function addTemp(store) {
     message: "マスターには登録されず、「買い物完了」で消えます。",
     body: `<label>名前<input name="name" placeholder="例: 誕生日ケーキ"></label>` +
       `<label>お店<select name="storeId">${storeOptions(store.id)}</select></label>` +
-      `<label>数量<input name="qty" type="number" min="1" value="1" inputmode="numeric"></label>`,
+      `<label>メモ（任意・自由記述）<input name="memo" placeholder="例: 2本、赤いほう"></label>`,
     buttons: [
       { label: "キャンセル" },
       { label: "追加", cls: "primary", onClick: (v) => {
         if (!v.name.trim()) return false;
-        const qty = Math.max(1, parseInt(v.qty, 10) || 1);
-        save("items", uid(), { name: v.name.trim(), storeId: v.storeId, categoryId: null, need: true, qty, by: who, temp: true, createdAt: Date.now() });
+        save("items", uid(), { name: v.name.trim(), storeId: v.storeId, categoryId: null, need: true, memo: v.memo.trim(), by: who, temp: true, createdAt: Date.now() });
         ui.storeId = v.storeId;
       } }
     ]
@@ -395,13 +445,42 @@ document.addEventListener("click", (e) => {
     case "cat-down": cat && swapOrder("categories", state.cats.filter((c) => c.storeId === cat.storeId), cat.id, 1); break;
     case "add-item": cat && addItem(cat); break;
     case "tile": if (item) { ui.edit ? editItem(item) : toggleItem(item); } break;
-    case "inc": item && changeQty(item, 1); break;
-    case "dec": item && changeQty(item, -1); break;
+    case "memo": item && editMemo(item); break;
+    case "free-toggle": { const f = state.free.find((x) => x.id === id); f && toggleFree(f); break; }
+    case "free-clear": clearDoneFree(); break;
   }
 });
 
 document.addEventListener("keydown", (e) => {
   if ((e.key === "Enter" || e.key === " ") && e.target.matches?.('.tile[data-action="tile"]')) { e.preventDefault(); e.target.click(); }
 });
+
+// フリーリストの入力欄
+$("#bar-free").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const input = $("#free-input");
+  addFree(input.value);
+  input.value = "";
+});
+
+// 左右スワイプでタブ切り替え（お店 → フリーの順）
+let touch = null;
+const swipeArea = $("#content");
+swipeArea.addEventListener("touchstart", (e) => {
+  touch = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() } : null;
+}, { passive: true });
+swipeArea.addEventListener("touchend", (e) => {
+  if (!touch || !db || document.querySelector("dialog[open]")) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - touch.x, dy = t.clientY - touch.y;
+  const fast = Date.now() - touch.t < 800;
+  touch = null;
+  if (!fast || Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+  const ids = state.stores.slice().sort(byOrder).map((x) => x.id).concat(FREE);
+  const cur = ui.storeId === FREE ? FREE : (currentStore() || {}).id;
+  const idx = ids.indexOf(cur);
+  const next = ids[Math.min(ids.length - 1, Math.max(0, idx + (dx < 0 ? 1 : -1)))];
+  if (next && next !== cur) { ui.storeId = next; ui.scrollTab = true; render(); window.scrollTo(0, 0); }
+}, { passive: true });
 
 boot();

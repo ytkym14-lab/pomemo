@@ -68,7 +68,10 @@ header h1 { font-size: 1.15rem; margin: 0; }
 
 #bar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 10px;
   padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); background: var(--bg); border-top: 1px solid var(--line); }
+#bar > div, #bar > form { display: flex; gap: 10px; width: 100%; }
 #bar button { flex: 1; padding: 14px; border-radius: 14px; font-weight: 700; }
+#bar-free input { flex: 1; margin: 0; font-size: 16px; border-radius: 14px; padding: 12px 14px; }
+#bar-free button { flex: none; padding: 14px 22px; }
 .primary { background: var(--green); color: var(--on-green); }
 .secondary { background: var(--surface); border: 1px solid var(--line); }
 .danger { color: var(--danger); }
@@ -88,3 +91,20 @@ dialog .btns .danger { border-color: var(--danger); }
 #toast { position: fixed; left: 50%; bottom: calc(86px + env(safe-area-inset-bottom)); transform: translateX(-50%);
   background: #222; color: #fff; padding: 10px 16px; border-radius: 99px; font-size: 0.9rem; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 50; }
 #toast.show { opacity: .95; }
+
+/* メモ（自由記述）*/
+.tile .memo { flex: 1; min-width: 0; padding: 3px 8px; border-radius: 8px; background: rgba(255,255,255,.22);
+  font-size: 0.85rem; line-height: 1.3; word-break: break-word; }
+.tile .memo.empty { opacity: .7; border: 1px dashed rgba(255,255,255,.55); background: transparent; }
+
+/* フリーリスト */
+#content { touch-action: pan-y; }
+.tab.free { margin-left: 4px; }
+ul.free { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.free-row { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 14px; background: var(--surface);
+  border: 1px solid var(--line); user-select: none; }
+.free-row .box { font-size: 1.4rem; line-height: 1; color: var(--green); }
+.free-row .text { flex: 1; word-break: break-word; }
+.free-row.done { background: transparent; color: var(--muted); }
+.free-row.done .text { text-decoration: line-through; }
+.free-row.done .box { color: var(--muted); }
