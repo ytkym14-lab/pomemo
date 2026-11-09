@@ -463,24 +463,59 @@ $("#bar-free").addEventListener("submit", (e) => {
   input.value = "";
 });
 
-// 左右スワイプでタブ切り替え（お店 → フリーの順）
-let touch = null;
+// 左右スワイプでタブ切り替え（お店 → フリーの順）。指に追従して動き、離すと隣のタブへスライドする。
 const swipeArea = $("#content");
-swipeArea.addEventListener("touchstart", (e) => {
-  touch = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() } : null;
-}, { passive: true });
-swipeArea.addEventListener("touchend", (e) => {
-  if (!touch || !db || document.querySelector("dialog[open]")) return;
-  const t = e.changedTouches[0];
-  const dx = t.clientX - touch.x, dy = t.clientY - touch.y;
-  const fast = Date.now() - touch.t < 800;
-  touch = null;
-  if (!fast || Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let drag = null;
+
+function neighborTab(dir) { // dir: +1 = 右のタブ, -1 = 左のタブ
   const ids = state.stores.slice().sort(byOrder).map((x) => x.id).concat(FREE);
   const cur = ui.storeId === FREE ? FREE : (currentStore() || {}).id;
-  const idx = ids.indexOf(cur);
-  const next = ids[Math.min(ids.length - 1, Math.max(0, idx + (dx < 0 ? 1 : -1)))];
-  if (next && next !== cur) { ui.storeId = next; ui.scrollTab = true; render(); window.scrollTo(0, 0); }
+  return ids[ids.indexOf(cur) + dir] || null;
+}
+function setX(x, ms) {
+  swipeArea.style.transition = ms ? `transform ${ms}ms ease-out` : "none";
+  swipeArea.style.transform = x ? `translateX(${x}px)` : "";
+}
+function finishSwipe() {
+  const d = drag; drag = null;
+  if (!d || d.lock !== "x") return;
+  const dir = d.dx < 0 ? 1 : -1;
+  const elapsed = Math.max(1, Date.now() - d.t);
+  const flick = Math.abs(d.dx) > 40 && Math.abs(d.dx) / elapsed > 0.5;
+  const next = neighborTab(dir);
+  if (!next || (Math.abs(d.dx) < 80 && !flick)) { setX(0, reduceMotion ? 0 : 220); return; } // 元の位置へ戻る
+  const out = dir > 0 ? -window.innerWidth : window.innerWidth;
+  const go = () => {
+    ui.storeId = next; ui.scrollTab = true; render(); window.scrollTo(0, 0);
+    if (reduceMotion) { setX(0, 0); return; }
+    setX(-out, 0);                       // 新しい画面は反対側から入ってくる
+    swipeArea.getBoundingClientRect();   // 位置を確定させてからアニメーション開始
+    setX(0, 240);
+  };
+  if (reduceMotion) { go(); return; }
+  setX(out, 160);
+  setTimeout(go, 160);
+}
+
+swipeArea.addEventListener("touchstart", (e) => {
+  if (e.touches.length !== 1 || document.querySelector("dialog[open]")) { drag = null; return; }
+  drag = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now(), lock: null, dx: 0 };
+  setX(0, 0);
 }, { passive: true });
+swipeArea.addEventListener("touchmove", (e) => {
+  if (!drag) return;
+  const t = e.touches[0];
+  const dx = t.clientX - drag.x, dy = t.clientY - drag.y;
+  if (!drag.lock) {
+    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+    drag.lock = Math.abs(dx) > Math.abs(dy) * 1.2 ? "x" : "y";
+  }
+  if (drag.lock !== "x") return;
+  drag.dx = dx;
+  setX(neighborTab(dx < 0 ? 1 : -1) ? dx : dx * 0.3, 0); // 端のタブでは重く引っ張られる感じにする
+}, { passive: true });
+swipeArea.addEventListener("touchend", finishSwipe);
+swipeArea.addEventListener("touchcancel", () => { if (drag) { drag.dx = 0; finishSwipe(); } });
 
 boot();

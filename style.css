@@ -11,7 +11,7 @@
   }
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; background: var(--bg); color: var(--text);
+html, body { overflow-x: clip; margin: 0; background: var(--bg); color: var(--text);
   font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; }
 body { min-height: 100dvh; }
 [hidden] { display: none !important; }
